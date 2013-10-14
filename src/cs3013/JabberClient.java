@@ -41,10 +41,10 @@ public class JabberClient {
 						getRoster();
 					}
 					else if(cmdName.equals("chat")) {
-						print("Under construction");
+						startChat(cmd);
 					}
 					else if(cmdName.equals("end")) {
-						print("Under construction");
+						endChat();
 					}
 					else if(cmdName.equals("quit")) {
 						send("</stream:stream>");
@@ -52,7 +52,7 @@ public class JabberClient {
 					}
 				}
 				else {
-					sendMessage(str);
+					sendChatMessage(str);
 				}
 			}
 		}
@@ -95,10 +95,10 @@ public class JabberClient {
 					parser.next();
 				}
 			} else if (tagName.equals("message")) {
-				//handle message
+				handleChatMessage(parser);
 			} else {
 				System.out.println("Unknown tag " + tagName + ", skipping");
-				parser.nextTag();
+				skipElement(parser);
 			}
 			break;
 		case XMLStreamConstants.END_ELEMENT:
@@ -139,6 +139,57 @@ public class JabberClient {
 		}
 	}
 	
+	private void startChat(String[] args) {
+		if(args.length != 2) {
+			print("Syntax error");
+		}
+
+		currentFriendJID = args[1];
+	}
+
+	private void endChat() {
+		currentFriendJID = null;
+	}
+
+	private void sendChatMessage(String msg) throws IOException {
+		if(currentFriendJID == null) {
+			print("Not chatting with any one right now");
+			return;
+		}
+
+		String stanza = String.format(
+			  "<message from='%s/%s'"
+			+         " to='%s'"
+			+         " type='chat'"
+			+         " xml:lang='en'>"
+			+     "<body>%s</body>"
+			+ "</message>",
+
+			jid.getJabberID(), jid.getResource(), currentFriendJID, msg
+		);
+
+		send(stanza);
+	}
+
+	private void handleChatMessage(XMLStreamReader parser) throws XMLStreamException {
+		while(true) {
+			switch(parser.nextTag()) {
+			case XMLStreamConstants.START_ELEMENT:
+				String tagName = parser.getLocalName();
+				if(tagName.equals("body")) {
+					print(parser.getElementText());
+				}
+				else {
+					skipElement(parser);
+					print(tagName);
+				}
+				break;
+			case XMLStreamConstants.END_ELEMENT:
+				return;
+			}
+		}
+	}
+
 	private void skipElement(XMLStreamReader parser) throws XMLStreamException {
 		int numEndTags = 1;
 		while(numEndTags > 0) {
@@ -151,10 +202,6 @@ public class JabberClient {
 				break;
 			}
 		}
-	}
-
-	private void sendMessage(String msg) {
-		print("Under construction");
 	}
 	
 	private String newStanzaId() {
@@ -179,6 +226,7 @@ public class JabberClient {
 	private XmppConnection connection;
 	private Map<String, TypedCallback<Void, XMLStreamReader>> iqHandlers
 		= new HashMap<String, TypedCallback<Void, XMLStreamReader>>();
+	private String currentFriendJID;
 	private Random random = new Random();
 	private TypedCallback<Void, XMLStreamReader> rosterCallback = new TypedCallback<Void, XMLStreamReader>() {
 		@Override
