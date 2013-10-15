@@ -27,6 +27,8 @@ public class JabberClient {
 				return true;
 			}
 		}).start();
+
+		send("<presence/>");
 		
 		try(Scanner scanner = new Scanner(System.in)) {
 			while(true) {
@@ -46,7 +48,11 @@ public class JabberClient {
 					else if(cmdName.equals("end")) {
 						endChat();
 					}
+					else if(cmdName.equals("raw")) {
+						sendRaw(cmd);
+					}
 					else if(cmdName.equals("quit")) {
+						send("<presence type='unavailable'/>");
 						send("</stream:stream>");
 						return;
 					}
@@ -90,6 +96,9 @@ public class JabberClient {
 					iqHandler.call(parser);
 					iqHandlers.remove(id);
 				}
+				else {
+					print("Unhandled iq");
+				}
 				while(parser.getEventType() != XMLStreamConstants.END_ELEMENT
 				      || !parser.getLocalName().equals("iq")) {
 					parser.next();
@@ -97,7 +106,6 @@ public class JabberClient {
 			} else if (tagName.equals("message")) {
 				handleChatMessage(parser);
 			} else {
-				System.out.println("Unknown tag " + tagName + ", skipping");
 				skipElement(parser);
 			}
 			break;
@@ -139,7 +147,7 @@ public class JabberClient {
 		}
 	}
 	
-	private void startChat(String[] args) {
+	private void startChat(String[] args) throws IOException {
 		if(args.length != 2) {
 			print("Syntax error");
 		}
@@ -147,7 +155,7 @@ public class JabberClient {
 		currentFriendJID = args[1];
 	}
 
-	private void endChat() {
+	private void endChat() throws IOException {
 		currentFriendJID = null;
 	}
 
@@ -172,22 +180,26 @@ public class JabberClient {
 	}
 
 	private void handleChatMessage(XMLStreamReader parser) throws XMLStreamException {
+		String friendJID = parser.getAttributeValue(null, "from").split("/")[0];
 		while(true) {
 			switch(parser.nextTag()) {
 			case XMLStreamConstants.START_ELEMENT:
 				String tagName = parser.getLocalName();
 				if(tagName.equals("body")) {
-					print(parser.getElementText());
+					print(friendJID + " says: " + parser.getElementText());
 				}
 				else {
 					skipElement(parser);
-					print(tagName);
 				}
 				break;
 			case XMLStreamConstants.END_ELEMENT:
 				return;
 			}
 		}
+	}
+
+	private void sendRaw(String[] cmd) throws IOException {
+		send(cmd[1]);
 	}
 
 	private void skipElement(XMLStreamReader parser) throws XMLStreamException {
