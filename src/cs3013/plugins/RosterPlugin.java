@@ -79,9 +79,7 @@ public class RosterPlugin implements Plugin, StanzaHandler {
 
 			JabberID jid = client.getJID();
 			String stanza = String.format(
-				  "<iq from='%s/%s'"
-				+    " id='%s'"
-				+    " type='get'>"
+				  "<iq from='%s/%s' id='%s' type='get'>"
 				+    " <query xmlns='jabber:iq:roster'/>"
 				+ "</iq>",
 				

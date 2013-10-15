@@ -65,10 +65,7 @@ public class ChatPlugin implements Plugin, ChatHandler, StanzaHandler {
 		JabberID jid = client.getJID();
 		
 		String stanza = String.format(
-			  "<message from='%s/%s'"
-			+         " to='%s'"
-			+         " type='chat'"
-			+         " xml:lang='en'>"
+			  "<message from='%s/%s' to='%s' type='chat' xml:lang='en'>"
 			+     "<body>%s</body>"
 			+ "</message>",
 
