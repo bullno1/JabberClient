@@ -121,7 +121,52 @@ public class JabberClient {
 			}
 			
 			if(!handled) {
-				XMLUtils.skipElement(parser);
+				if(developerMode) {
+					int depth = 1;
+					synchronized(System.out) {
+						while(depth > 0) {
+							switch(parser.getEventType()) {
+							case XMLStreamConstants.START_ELEMENT:
+								for(int i = 1; i < depth; ++i) {
+									System.out.print("    ");
+								}
+								System.out.print("<");
+								System.out.print(parser.getLocalName());
+								for(int i = 0; i < parser.getAttributeCount(); ++i) {
+									System.out.print(" ");
+									System.out.print(parser.getAttributeLocalName(i));
+									System.out.print("=\"");
+									System.out.print(parser.getAttributeValue(i));
+									System.out.print("\"");
+								}
+								System.out.println(">");
+
+								++depth;
+								break;
+							case XMLStreamConstants.END_ELEMENT:
+								--depth;
+								for(int i = 1; i < depth; ++i) {
+									System.out.print("    ");
+								}
+								System.out.print("</");
+								System.out.print(parser.getLocalName());
+								System.out.println(">");
+								break;
+							case XMLStreamConstants.CHARACTERS:
+								for(int i = 1; i < depth; ++i) {
+									System.out.print("    ");
+								}
+								
+								System.out.println(parser.getText());
+								break;
+							}
+							parser.next();
+						}
+					}
+				}
+				else {
+					XMLUtils.skipElement(parser);
+				}
 			}
 			break;
 		case XMLStreamConstants.END_ELEMENT:
@@ -134,6 +179,7 @@ public class JabberClient {
 		plugins.add(plugin);
 	}
 
+	private boolean developerMode = false;
 	private List<Plugin> plugins = new ArrayList<Plugin>();
 	private Map<String, Command> commands = new HashMap<String, Command>();
 	private List<StanzaHandler> stanzaHandlers = new ArrayList<StanzaHandler>();
@@ -146,11 +192,42 @@ public class JabberClient {
 		@Override
 		public void init(JabberClient client) {
 			client.registerCommand("help", new HelpCommand());
+			client.registerCommand("dev", new DeveloperCommand());
 		}
 
 		@Override
 		public void terminate() {
 		}
+	}
+	
+	private class DeveloperCommand implements Command {
+		@Override
+		public String getShortDescription() {
+			return "Developer mode.";
+		}
+
+		@Override
+		public String getLongDescription() {
+			return "@dev on - Enable developer mode.\n"
+			      +"@dev off - Disable developer mode.\n"
+			      +"@dev - Check status.";
+		}
+
+		@Override
+		public void execute(String[] args) throws IOException {
+			if(args.length == 1) {
+				printStatus();
+			}
+			else {
+				developerMode = args[1].equals("on");
+				printStatus();
+			}
+		}
+
+		private void printStatus() {
+			print("Developer mode is: " + (developerMode ? "on" : "off"));
+		}
+		
 	}
 
 	private class HelpCommand implements Command {
