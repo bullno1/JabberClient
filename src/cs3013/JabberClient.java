@@ -36,7 +36,16 @@ public class JabberClient {
 			}
 		}).start();
 
-		send("<presence/>");
+		send("<presence/>");//set presence
+		//this is required for Facebook chat
+		String sessionStanza = String.format(
+			  "<iq type='set' id='%s' to='%s'>"
+			+     "<session xmlns='urn:ietf:params:xml:ns:xmpp-session'/>"
+			+ "</iq>",
+
+			newStanzaId(), jid.getDomain()
+		);
+		send(sessionStanza);
 		
 		try(Scanner scanner = new Scanner(System.in)) {
 			while(true) {
