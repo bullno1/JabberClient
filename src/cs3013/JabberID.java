@@ -69,7 +69,7 @@ public class JabberID {
 		if ( parts.length != 2 ) {
 			throw new IllegalArgumentException( "Jabber ID invalid: Must be in format username@domain" );
 		}
-		this.jid = jid;
+		this.jid = parts[1].equals("facebook.com") ? parts[0] : jid;
 		this.username = parts[0];
 		this.domain = parts[1];
 	}

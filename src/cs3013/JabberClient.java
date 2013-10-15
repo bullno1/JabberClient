@@ -2,14 +2,17 @@ package cs3013;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Scanner;
 
 import javax.xml.stream.XMLStreamConstants;
-import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
+
+import cs3013.plugins.*;
 
 public class JabberClient {
 	public JabberClient(JabberID jid) {
@@ -18,8 +21,13 @@ public class JabberClient {
 	}
 	
 	public void start() throws IOException {
-		connection.connect();
+		installPlugin(new CorePlugin());
+		installPlugin(new RosterPlugin());
+		installPlugin(new ChatPlugin());
+		installPlugin(new RawStanza());
 
+		connection.connect();
+		
 		new XMLStreamWatcher(connection.getParser(), new TypedCallback<Boolean, XMLStreamReader>() {
 			@Override
 			public Boolean call(XMLStreamReader reader) throws Exception {
@@ -36,29 +44,16 @@ public class JabberClient {
 				if(isCommand(str)) {
 					String[] cmd = str.split("\\s+");
 					String cmdName = cmd[0].substring(1);
-					if(cmdName.equals("help")) {
-						showHelp();
+					Command command = commands.get(cmdName);
+					if(command != null) {
+						command.execute(cmd);
 					}
-					else if(cmdName.equals("roster")) {
-						getRoster();
-					}
-					else if(cmdName.equals("chat")) {
-						startChat(cmd);
-					}
-					else if(cmdName.equals("end")) {
-						endChat();
-					}
-					else if(cmdName.equals("raw")) {
-						sendRaw(cmd);
-					}
-					else if(cmdName.equals("quit")) {
-						send("<presence type='unavailable'/>");
-						send("</stream:stream>");
-						return;
+					else {
+						print("Invalid command");
 					}
 				}
 				else {
-					sendChatMessage(str);
+					chatHandler.sendMessage(str);
 				}
 			}
 		}
@@ -68,183 +63,124 @@ public class JabberClient {
 		if(connection != null) {
 			connection.close();
 			connection = null;
-		}
-	}
-
-	private static boolean isCommand(String str) {
-		return str.startsWith("@");
-	}
-	
-	private void showHelp() {
-		System.out.println(
-			  "@roster - Gets the roster list\n"
-			+ "@chat <friend_jabber_id> - This ends any ongoing chat session, and starts\n"
-			+ "a new chat session with a friend with specified Jabber ID.\n"
-			+ "@end - End any ongoing chat"
-			+ "@help - Display this help menu"
-		);
-	}
-
-	private boolean handleTag(XMLStreamReader parser) throws Exception {
-		switch(parser.getEventType()) {
-		case XMLStreamConstants.START_ELEMENT:
-			String tagName = parser.getLocalName();
-			if(tagName.equals("iq")) {
-				String id = parser.getAttributeValue(null, "id");
-				TypedCallback<Void, XMLStreamReader> iqHandler = iqHandlers.get(id);
-				if(iqHandler != null) {
-					iqHandler.call(parser);
-					iqHandlers.remove(id);
-				}
-				else {
-					print("Unhandled iq");
-				}
-				while(parser.getEventType() != XMLStreamConstants.END_ELEMENT
-				      || !parser.getLocalName().equals("iq")) {
-					parser.next();
-				}
-			} else if (tagName.equals("message")) {
-				handleChatMessage(parser);
-			} else {
-				skipElement(parser);
-			}
-			break;
-		case XMLStreamConstants.END_ELEMENT:
-			print(parser.getLocalName());
-			break;
-		}
-		
-		return true;
-	}
-		
-	private void getRoster() throws IOException {
-		String stanzaId = newStanzaId();
-		iqHandlers.put(stanzaId, rosterCallback);
-		String stanza = String.format(
-			  "<iq from='%s/%s'"
-			+    " id='%s'"
-			+    " type='get'>"
-			+    " <query xmlns='jabber:iq:roster'/>"
-			+ "</iq>",
 			
-			jid.getJabberID(), jid.getResource(), stanzaId
-		);
-		
-		send(stanza);
-	}
-
-	private void handleRoster(XMLStreamReader parser) throws XMLStreamException {
-		parser.nextTag();//Skip to <query>
-		while(true) {
-			switch(parser.nextTag()) {
-			case XMLStreamConstants.START_ELEMENT:
-				print(parser.getAttributeValue(null, "jid"));
-				skipElement(parser);
-				break;
-			case XMLStreamConstants.END_ELEMENT:
-				return;
-			}
-		}
-	}
-	
-	private void startChat(String[] args) throws IOException {
-		if(args.length != 2) {
-			print("Syntax error");
-		}
-
-		currentFriendJID = args[1];
-	}
-
-	private void endChat() throws IOException {
-		currentFriendJID = null;
-	}
-
-	private void sendChatMessage(String msg) throws IOException {
-		if(currentFriendJID == null) {
-			print("Not chatting with any one right now");
-			return;
-		}
-
-		String stanza = String.format(
-			  "<message from='%s/%s'"
-			+         " to='%s'"
-			+         " type='chat'"
-			+         " xml:lang='en'>"
-			+     "<body>%s</body>"
-			+ "</message>",
-
-			jid.getJabberID(), jid.getResource(), currentFriendJID, msg
-		);
-
-		send(stanza);
-	}
-
-	private void handleChatMessage(XMLStreamReader parser) throws XMLStreamException {
-		String friendJID = parser.getAttributeValue(null, "from").split("/")[0];
-		while(true) {
-			switch(parser.nextTag()) {
-			case XMLStreamConstants.START_ELEMENT:
-				String tagName = parser.getLocalName();
-				if(tagName.equals("body")) {
-					print(friendJID + " says: " + parser.getElementText());
-				}
-				else {
-					skipElement(parser);
-				}
-				break;
-			case XMLStreamConstants.END_ELEMENT:
-				return;
+			for(Plugin plugin: plugins) {
+				plugin.terminate();
 			}
 		}
 	}
 
-	private void sendRaw(String[] cmd) throws IOException {
-		send(cmd[1]);
-	}
-
-	private void skipElement(XMLStreamReader parser) throws XMLStreamException {
-		int numEndTags = 1;
-		while(numEndTags > 0) {
-			switch(parser.next()) {
-			case XMLStreamConstants.START_ELEMENT:
-				++numEndTags;//go down
-				break;
-			case XMLStreamConstants.END_ELEMENT:
-				--numEndTags;//go up
-				break;
-			}
-		}
-	}
-	
-	private String newStanzaId() {
+	public String newStanzaId() {
 		return Long.toString(random.nextLong(), 16);
 	}
 	
-	private void send(String msg) throws IOException {
+	public void send(String msg) throws IOException {
 		BufferedWriter writer = connection.getWriter();
 		synchronized(writer) {
 			writer.write(msg);
 			writer.flush();
 		}
 	}
-	
-	private void print(String msg) {
+
+	public void print(String msg) {
 		synchronized(System.out) {
 			System.out.println(msg);
 		}
 	}
+	
+	public JabberID getJID() {
+		return jid;
+	}
 
+	public void registerCommand(String name, Command command) {
+		commands.put(name, command);
+	}
+
+	public void registerStanzaHandler(StanzaHandler handler) {
+		stanzaHandlers.add(handler);
+	}
+
+	private static boolean isCommand(String str) {
+		return str.startsWith("@");
+	}
+
+	public void setChatHandler(ChatHandler handler) {
+		chatHandler = handler;
+	}
+
+	private void handleTag(XMLStreamReader parser) throws Exception {
+		switch(parser.getEventType()) {
+		case XMLStreamConstants.START_ELEMENT:
+			boolean handled = false;
+	
+			for(StanzaHandler handler: stanzaHandlers) {
+				if(handler.onStanza(parser)) {
+					handled = true;
+					break;
+				}
+			}
+			
+			if(!handled) {
+				XMLUtils.skipElement(parser);
+			}
+			break;
+		case XMLStreamConstants.END_ELEMENT:
+			break;
+		}
+	}
+	
+	private void installPlugin(Plugin plugin) {
+		plugin.init(this);
+		plugins.add(plugin);
+	}
+
+	private List<Plugin> plugins = new ArrayList<Plugin>();
+	private Map<String, Command> commands = new HashMap<String, Command>();
+	private List<StanzaHandler> stanzaHandlers = new ArrayList<StanzaHandler>();
+	private ChatHandler chatHandler;
 	private JabberID jid;
 	private XmppConnection connection;
-	private Map<String, TypedCallback<Void, XMLStreamReader>> iqHandlers
-		= new HashMap<String, TypedCallback<Void, XMLStreamReader>>();
-	private String currentFriendJID;
 	private Random random = new Random();
-	private TypedCallback<Void, XMLStreamReader> rosterCallback = new TypedCallback<Void, XMLStreamReader>() {
+	
+	private class CorePlugin implements Plugin {
 		@Override
-		public Void call(XMLStreamReader parser) throws Exception {
-			handleRoster(parser);
-			return null;
+		public void init(JabberClient client) {
+			client.registerCommand("help", new HelpCommand());
+		}
+
+		@Override
+		public void terminate() {
+		}
+	}
+
+	private class HelpCommand implements Command {
+		@Override
+		public String getShortDescription() {
+			return "Shows help. Use @help <command> to know more about a command";
+		}
+		
+		@Override
+		public String getLongDescription() {
+			return "@help [command]\n\n" + getShortDescription();
+		}
+		
+		@Override
+		public void execute(String[] args) throws IOException {
+			if(args.length < 2) {//short help
+				for(Map.Entry<String, Command> pair: commands.entrySet()) {
+					print("@" + pair.getKey() + " - " + pair.getValue().getShortDescription());
+				}
+			}
+			else {//long help
+				String cmdName = args[1];
+				Command command = commands.get(cmdName);
+				if(command != null) {
+					print(command.getLongDescription());
+				}
+				else {
+					print("Unrecognized command");
+				}
+			}
 		}
 	};
 }
