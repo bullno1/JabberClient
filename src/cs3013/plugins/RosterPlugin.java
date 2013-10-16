@@ -1,10 +1,10 @@
 package cs3013.plugins;
 
-import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 
 import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 
 import cs3013.Command;
@@ -29,7 +29,7 @@ public class RosterPlugin implements Plugin, StanzaHandler {
 	}
 
 	@Override
-	public boolean onStanza(XMLStreamReader parser) throws Exception {
+	public boolean onStanza(XMLStreamReader parser) throws XMLStreamException {
 		// Only interested in <iq>
 		if(!parser.getLocalName().equals("iq")) return false;
 
@@ -73,7 +73,7 @@ public class RosterPlugin implements Plugin, StanzaHandler {
 		}
 
 		@Override
-		public void execute(String[] args) throws IOException {
+		public void execute(String[] args) {
 			String stanzaId = client.newStanzaId();
 			rosterStanzaIds.add(stanzaId);
 

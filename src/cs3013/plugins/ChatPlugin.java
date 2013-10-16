@@ -3,6 +3,7 @@ package cs3013.plugins;
 import java.io.IOException;
 
 import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 
 import cs3013.ChatHandler;
@@ -40,7 +41,7 @@ public class ChatPlugin implements Plugin, ChatHandler, StanzaHandler {
 	}
 
 	@Override
-	public boolean onStanza(XMLStreamReader parser) throws Exception {
+	public boolean onStanza(XMLStreamReader parser) throws XMLStreamException {
 		if(!parser.getLocalName().equals("message")) return false;
 
 		String friendJID = parser.getAttributeValue(null, "from").split("/")[0];
@@ -92,7 +93,7 @@ public class ChatPlugin implements Plugin, ChatHandler, StanzaHandler {
 		}
 
 		@Override
-		public void execute(String[] args) throws IOException {
+		public void execute(String[] args) {
 			if(args.length == 2) {
 				currentFriendJID = args[1];
 			}
@@ -114,7 +115,7 @@ public class ChatPlugin implements Plugin, ChatHandler, StanzaHandler {
 		}
 
 		@Override
-		public void execute(String[] args) throws IOException {
+		public void execute(String[] args) {
 			currentFriendJID = null;
 		}
 	}

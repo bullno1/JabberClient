@@ -10,7 +10,6 @@ import java.util.Random;
 import java.util.Scanner;
 
 import javax.xml.stream.XMLStreamConstants;
-import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 
 import cs3013.plugins.*;
@@ -18,7 +17,6 @@ import cs3013.plugins.*;
 public class JabberClient {
 	public JabberClient(JabberID jid) {
 		this.jid = jid;
-		this.connection = new XmppConnection(jid);
 	}
 	
 	public void start() throws IOException {
@@ -26,62 +24,38 @@ public class JabberClient {
 		installPlugin(new RosterPlugin());
 		installPlugin(new ChatPlugin());
 		installPlugin(new RawStanza());
+		clientRunning = true;
 
-		connection.connect();
-		
-		running = true;
-		socketHandler = new Thread() {
+		Thread commandHandler = new Thread() {
 			@Override
 			public void run() {
-				handleSocket();
+				commandLoop();
 			}
 		};
-		socketHandler.start();
-
-		send("<presence/>");//set presence
-		//this is required for Facebook chat
-		String sessionStanza = String.format(
-			  "<iq type='set' id='%s' to='%s'>"
-			+     "<session xmlns='urn:ietf:params:xml:ns:xmpp-session'/>"
-			+ "</iq>",
-
-			newStanzaId(), jid.getDomain()
-		);
-		send(sessionStanza);
+		commandHandler.start();
 		
-		try(Scanner scanner = new Scanner(System.in)) {
-			while(running) {
-				String str = scanner.nextLine();
-				if(isCommand(str)) {
-					String[] cmd = str.split("\\s+");
-					String cmdName = cmd[0].substring(1);
-					Command command = commands.get(cmdName);
-					if(command != null) {
-						command.execute(cmd);
-					}
-					else {
-						print("Invalid command");
-					}
-				}
-				else {
-					chatHandler.sendMessage(str);
-				}
-			}
+		boolean firstTime = true;
+		while(clientRunning) {
+			mainLoop(firstTime);
+			firstTime = false;
+		}
+
+		try {
+			connection.close();
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 	}
 
-	public void stop() throws IOException {
-		if(connection != null) {
+	public synchronized void stop() {
+		if(clientRunning) {
+			clientRunning = false;
+			stopSession();
+			send("</stream:stream>");
+
 			for(Plugin plugin: plugins) {
 				plugin.terminate();
 			}
-
-			running = false;
-			socketHandler.interrupt();
-			send("</stream:stream>");
-
-			connection.close();
-			connection = null;
 		}
 	}
 
@@ -89,18 +63,18 @@ public class JabberClient {
 		return Long.toString(random.nextLong(), 16);
 	}
 	
-	public void send(String msg) throws IOException {
+	public synchronized void send(String msg) {
 		BufferedWriter writer = connection.getWriter();
-		synchronized(writer) {
+		try {
 			writer.write(msg);
 			writer.flush();
+		} catch (IOException e) {
+			onConnectionLost();
 		}
 	}
 
-	public void print(String msg) {
-		synchronized(System.out) {
-			System.out.println(msg);
-		}
+	public synchronized void print(String msg) {
+		System.out.println(msg);
 	}
 	
 	public JabberID getJID() {
@@ -123,24 +97,135 @@ public class JabberClient {
 		chatHandler = handler;
 	}
 	
-	private void handleSocket() {
+	private void mainLoop(boolean firstTime) {
+		sessionRunning = true;
+		mainThread = Thread.currentThread();
+
+		connectLoop(firstTime);
+		if(!sessionRunning) return;
+
+		Thread socketHandler = new Thread() {
+			@Override
+			public void run() {
+				socketLoop();
+			}
+		};
+		socketHandler.start();
+		
+		send("<presence/>");//set presence
+		//this is required for Facebook chat
+		String sessionStanza = String.format(
+			  "<iq type='set' id='%s' to='%s'>"
+			+     "<session xmlns='urn:ietf:params:xml:ns:xmpp-session'/>"
+			+ "</iq>",
+
+			newStanzaId(), jid.getDomain()
+		);
+		send(sessionStanza);
+		
+		try {
+			while(!Thread.interrupted()) {//keepalive
+				Thread.sleep(60 * 5 * 1000);
+				send(" ");
+			}
+		} catch (InterruptedException e) {
+			if(sessionRunning)//interrupted for some unknown reason
+				e.printStackTrace();
+		}
+		
+		try {
+			socketHandler.interrupt();
+			socketHandler.join();
+		} catch (InterruptedException e) {//can't be interrupted again, something is wrong
+			e.printStackTrace();
+		}
+	}
+	
+	private void connectLoop(boolean firstTime) {
+		int numAttempts = firstTime ? 0 : 1;
+
+		try {
+			boolean connected = false;
+			while(sessionRunning && !connected) {
+				int numSlots = 20;
+				Random random = new Random();
+				int upperBound = Math.min((int)Math.pow(2, numAttempts), numSlots) - 1;
+				long waitTime = random.nextInt(upperBound + 1) * 60 * 1000 / numSlots;
+
+				if(numAttempts > 0 || !firstTime) {
+					print("Waiting " + waitTime / 1000 + "s");
+				}
+
+				Thread.sleep(waitTime);
+				try {
+					print("---------------------------------------------------");
+					connection = new XmppConnection(jid);
+					connection.connect();
+					print("-------------------- Connected --------------------");
+					connected = true;
+				} catch (IOException e) {
+					print("---------------- Failed to connect ----------------");
+				} catch (XmppException e) {
+					e.printStackTrace();
+					stop();
+				}
+				++numAttempts;
+			}
+		}
+		catch(InterruptedException _) {
+		}
+	}
+	
+	private void commandLoop() {
+		try(Scanner scanner = new Scanner(System.in)) {
+			while(clientRunning) {
+				String str = scanner.nextLine();
+				if(isCommand(str)) {
+					String[] cmd = str.split("\\s+");
+					String cmdName = cmd[0].substring(1);
+					Command command = commands.get(cmdName);
+					if(command != null) {
+						synchronized(this) {
+							command.execute(cmd);
+						}
+					}
+					else {
+						print("Invalid command");
+					}
+				}
+				else {
+					synchronized(this) {
+						chatHandler.sendMessage(str);
+					}
+				}
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	private void socketLoop() {
 		XMLStreamReader parser = connection.getParser();
 		try {
-			while(running) {
+			while(!Thread.interrupted()) {
 				if(parser.next() != XMLStreamConstants.START_ELEMENT) continue;
 				
 				boolean handled = false;
 		
-				for(StanzaHandler handler: stanzaHandlers) {
-					if(handler.onStanza(parser)) {
-						handled = true;
-						break;
+				synchronized(this) {
+					for(StanzaHandler handler: stanzaHandlers) {
+						if(handler.onStanza(parser)) {
+							handled = true;
+							break;
+						}
 					}
 				}
 				
 				if(!handled) {
 					if(developerMode) {
-						dumpXML(parser);
+						synchronized(this) {
+							XMLUtils.dumpXML(parser);
+						}
 					}
 					else {
 						XMLUtils.skipElement(parser);
@@ -149,7 +234,7 @@ public class JabberClient {
 			}
 		}
 		catch(Exception e) {
-			if(running) {
+			if(sessionRunning) {
 				//confirm if it is due to socket
 				boolean disconnected = false;
 				try {
@@ -158,66 +243,37 @@ public class JabberClient {
 					disconnected = true;
 				}
 				
-				if(!disconnected) {
-					e.printStackTrace();
+				if(disconnected) {
+					onConnectionLost();
 				}
 				else {
-					System.out.println("Connection lost");
+					e.printStackTrace();
 				}
 			}
 		}
+	}
+
+	private void onConnectionLost() {
+		if(!stopSession()) return;
+
+		print("------------------ Connection lost ----------------");
+	}
+	
+	private synchronized boolean stopSession() {
+		if(!sessionRunning) return false;
+		sessionRunning = false;
+
+		mainThread.interrupt();
+		return true;
 	}
 
 	private void installPlugin(Plugin plugin) {
 		plugin.init(this);
 		plugins.add(plugin);
 	}
-
-	private void dumpXML(XMLStreamReader parser) throws XMLStreamException {
-		int depth = 1;
-		synchronized(System.out) {
-			while(depth > 0) {
-				switch(parser.getEventType()) {
-				case XMLStreamConstants.START_ELEMENT:
-					for(int i = 1; i < depth; ++i) {
-						System.out.print("    ");
-					}
-					System.out.print("<");
-					System.out.print(parser.getLocalName());
-					for(int i = 0; i < parser.getAttributeCount(); ++i) {
-						System.out.print(" ");
-						System.out.print(parser.getAttributeLocalName(i));
-						System.out.print("=\"");
-						System.out.print(parser.getAttributeValue(i));
-						System.out.print("\"");
-					}
-					System.out.println(">");
-
-					++depth;
-					break;
-				case XMLStreamConstants.END_ELEMENT:
-					--depth;
-					for(int i = 1; i < depth; ++i) {
-						System.out.print("    ");
-					}
-					System.out.print("</");
-					System.out.print(parser.getLocalName());
-					System.out.println(">");
-					break;
-				case XMLStreamConstants.CHARACTERS:
-					for(int i = 1; i < depth; ++i) {
-						System.out.print("    ");
-					}
-					
-					System.out.println(parser.getText());
-					break;
-				}
-				parser.next();
-			}
-		}
-	}
 	
-	private boolean running;
+	private boolean clientRunning;
+	private boolean sessionRunning;
 	private boolean developerMode = false;
 	private List<Plugin> plugins = new ArrayList<Plugin>();
 	private Map<String, Command> commands = new HashMap<String, Command>();
@@ -226,7 +282,7 @@ public class JabberClient {
 	private JabberID jid;
 	private XmppConnection connection;
 	private Random random = new Random();
-	private Thread socketHandler;
+	private Thread mainThread;
 	
 	private class CorePlugin implements Plugin {
 		@Override
@@ -255,7 +311,7 @@ public class JabberClient {
 		}
 
 		@Override
-		public void execute(String[] args) throws IOException {
+		public void execute(String[] args) {
 			if(args.length == 1) {
 				printStatus();
 			}
@@ -283,7 +339,7 @@ public class JabberClient {
 		}
 		
 		@Override
-		public void execute(String[] args) throws IOException {
+		public void execute(String[] args) {
 			if(args.length < 2) {//short help
 				for(Map.Entry<String, Command> pair: commands.entrySet()) {
 					print("@" + pair.getKey() + " - " + pair.getValue().getShortDescription());
@@ -315,7 +371,7 @@ public class JabberClient {
 		}
 
 		@Override
-		public void execute(String[] args) throws IOException {
+		public void execute(String[] args) {
 			stop();
 		}
 	}

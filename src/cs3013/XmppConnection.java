@@ -54,7 +54,7 @@ public class XmppConnection implements AutoCloseable {
 
 	/** Opens an XMPP connection to the server. */
 	public void connect() 
-		throws IOException {
+		throws IOException, XmppException {
 
 		// Create a socket
 		socket = new Socket();
@@ -141,7 +141,7 @@ public class XmppConnection implements AutoCloseable {
 	
 	/** Creates an XML stream from/to the server. */
 	private void createXmlStream() 
-		throws IOException {
+		throws IOException, XmppException {
 
 		try {
 
@@ -207,7 +207,7 @@ public class XmppConnection implements AutoCloseable {
 
 	/** Handles a new XML stream from the server. */
 	private boolean handleServerStream() 
-		throws IOException , XMLStreamException {
+		throws IOException , XMLStreamException, XmppException {
 
 		// Get the next XML event
 		int eventType = parser.getEventType();
@@ -595,7 +595,7 @@ public class XmppConnection implements AutoCloseable {
 
 	/** Handles TLS or SASL Failure tag. */
 	private void handleFailureTag() 
-		throws IOException , XMLStreamException {
+		throws IOException , XMLStreamException, XmppException {
 
 		// DEBUG
 		System.out.println( "Handling server's failure tag" );
@@ -605,16 +605,16 @@ public class XmppConnection implements AutoCloseable {
 		//	   make a custom Exception class
 		String namespace = parser.getNamespaceURI();
 		if ( namespace == null ) {
-			throw new IOException( "Server sent Failure stanza: Unknown reason" );
+			throw new XmppException( "Server sent Failure stanza: Unknown reason" );
 		}
 		else if ( namespace.equals( "urn:ietf:params:xml:ns:xmpp-sasl" ) ) {
-			throw new IOException( "Server sent Failure stanza: Authentication failure" );
+			throw new XmppException( "Server sent Failure stanza: Authentication failure" );
 		}
 		else if ( namespace.equals( "urn:ietf:params:xml:ns:xmpp-tls" ) ) {
-			throw new IOException( "Server sent Failure stanza: Unable to upgrade to TLS" );
+			throw new XmppException( "Server sent Failure stanza: Unable to upgrade to TLS" );
 		}
 		else {
-			throw new IOException( "Server sent Failure stanza: Namespace: " + 
+			throw new XmppException( "Server sent Failure stanza: Namespace: " + 
 								   namespace );
 		}
 	}
