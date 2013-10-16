@@ -31,6 +31,7 @@ public class JabberClient {
 		installPlugin(new RosterPlugin());
 		installPlugin(new ChatPlugin());
 		installPlugin(new RawStanza());
+		installPlugin(new Vcard());
 
 		running = true;
 		firstConnection = true;
