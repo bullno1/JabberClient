@@ -10,6 +10,7 @@ import java.util.Random;
 import java.util.Scanner;
 
 import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 
 import cs3013.plugins.*;
@@ -28,14 +29,14 @@ public class JabberClient {
 
 		connection.connect();
 		
-		watcher = new XMLStreamWatcher(connection.getParser(), new TypedCallback<Boolean, XMLStreamReader>() {
+		running = true;
+		socketHandler = new Thread() {
 			@Override
-			public Boolean call(XMLStreamReader reader) throws Exception {
-				handleTag(reader);
-				return true;
+			public void run() {
+				handleSocket();
 			}
-		});
-		watcher.start();
+		};
+		socketHandler.start();
 
 		send("<presence/>");//set presence
 		//this is required for Facebook chat
@@ -48,7 +49,6 @@ public class JabberClient {
 		);
 		send(sessionStanza);
 		
-		running = true;
 		try(Scanner scanner = new Scanner(System.in)) {
 			while(running) {
 				String str = scanner.nextLine();
@@ -76,9 +76,9 @@ public class JabberClient {
 				plugin.terminate();
 			}
 
-			watcher.stop();
-			send("</stream:stream>");
 			running = false;
+			socketHandler.interrupt();
+			send("</stream:stream>");
 
 			connection.close();
 			connection = null;
@@ -122,78 +122,101 @@ public class JabberClient {
 	public void setChatHandler(ChatHandler handler) {
 		chatHandler = handler;
 	}
-
-	private void handleTag(XMLStreamReader parser) throws Exception {
-		switch(parser.getEventType()) {
-		case XMLStreamConstants.START_ELEMENT:
-			boolean handled = false;
 	
-			for(StanzaHandler handler: stanzaHandlers) {
-				if(handler.onStanza(parser)) {
-					handled = true;
-					break;
-				}
-			}
-			
-			if(!handled) {
-				if(developerMode) {
-					int depth = 1;
-					synchronized(System.out) {
-						while(depth > 0) {
-							switch(parser.getEventType()) {
-							case XMLStreamConstants.START_ELEMENT:
-								for(int i = 1; i < depth; ++i) {
-									System.out.print("    ");
-								}
-								System.out.print("<");
-								System.out.print(parser.getLocalName());
-								for(int i = 0; i < parser.getAttributeCount(); ++i) {
-									System.out.print(" ");
-									System.out.print(parser.getAttributeLocalName(i));
-									System.out.print("=\"");
-									System.out.print(parser.getAttributeValue(i));
-									System.out.print("\"");
-								}
-								System.out.println(">");
-
-								++depth;
-								break;
-							case XMLStreamConstants.END_ELEMENT:
-								--depth;
-								for(int i = 1; i < depth; ++i) {
-									System.out.print("    ");
-								}
-								System.out.print("</");
-								System.out.print(parser.getLocalName());
-								System.out.println(">");
-								break;
-							case XMLStreamConstants.CHARACTERS:
-								for(int i = 1; i < depth; ++i) {
-									System.out.print("    ");
-								}
-								
-								System.out.println(parser.getText());
-								break;
-							}
-							parser.next();
-						}
+	private void handleSocket() {
+		XMLStreamReader parser = connection.getParser();
+		try {
+			while(running) {
+				if(parser.next() != XMLStreamConstants.START_ELEMENT) continue;
+				
+				boolean handled = false;
+		
+				for(StanzaHandler handler: stanzaHandlers) {
+					if(handler.onStanza(parser)) {
+						handled = true;
+						break;
 					}
 				}
-				else {
-					XMLUtils.skipElement(parser);
+				
+				if(!handled) {
+					if(developerMode) {
+						dumpXML(parser);
+					}
+					else {
+						XMLUtils.skipElement(parser);
+					}
 				}
 			}
-			break;
-		case XMLStreamConstants.END_ELEMENT:
-			break;
+		}
+		catch(Exception e) {
+			if(running) {
+				//confirm if it is due to socket
+				boolean disconnected = false;
+				try {
+					disconnected = connection.getSocket().getInputStream().read() == -1;
+				} catch (IOException _) {
+					disconnected = true;
+				}
+				
+				if(!disconnected) {
+					e.printStackTrace();
+				}
+				else {
+					System.out.println("Connection lost");
+				}
+			}
 		}
 	}
-	
+
 	private void installPlugin(Plugin plugin) {
 		plugin.init(this);
 		plugins.add(plugin);
 	}
 
+	private void dumpXML(XMLStreamReader parser) throws XMLStreamException {
+		int depth = 1;
+		synchronized(System.out) {
+			while(depth > 0) {
+				switch(parser.getEventType()) {
+				case XMLStreamConstants.START_ELEMENT:
+					for(int i = 1; i < depth; ++i) {
+						System.out.print("    ");
+					}
+					System.out.print("<");
+					System.out.print(parser.getLocalName());
+					for(int i = 0; i < parser.getAttributeCount(); ++i) {
+						System.out.print(" ");
+						System.out.print(parser.getAttributeLocalName(i));
+						System.out.print("=\"");
+						System.out.print(parser.getAttributeValue(i));
+						System.out.print("\"");
+					}
+					System.out.println(">");
+
+					++depth;
+					break;
+				case XMLStreamConstants.END_ELEMENT:
+					--depth;
+					for(int i = 1; i < depth; ++i) {
+						System.out.print("    ");
+					}
+					System.out.print("</");
+					System.out.print(parser.getLocalName());
+					System.out.println(">");
+					break;
+				case XMLStreamConstants.CHARACTERS:
+					for(int i = 1; i < depth; ++i) {
+						System.out.print("    ");
+					}
+					
+					System.out.println(parser.getText());
+					break;
+				}
+				parser.next();
+			}
+		}
+	}
+	
 	private boolean running;
 	private boolean developerMode = false;
 	private List<Plugin> plugins = new ArrayList<Plugin>();
@@ -203,7 +226,7 @@ public class JabberClient {
 	private JabberID jid;
 	private XmppConnection connection;
 	private Random random = new Random();
-	private XMLStreamWatcher watcher;
+	private Thread socketHandler;
 	
 	private class CorePlugin implements Plugin {
 		@Override
