@@ -32,10 +32,10 @@ public class JabberClient {
 		installPlugin(new ChatPlugin());
 		installPlugin(new RawStanza());
 
-		startConnectLoop();
-		startCommandLoop();
 		running = true;
 		firstConnection = true;
+		startConnectLoop();
+		startCommandLoop();
 
 		try {
 			while(running) {
