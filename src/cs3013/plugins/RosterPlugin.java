@@ -73,7 +73,7 @@ public class RosterPlugin implements Plugin, StanzaHandler {
 		}
 
 		@Override
-		public void execute(String[] args) {
+		public void execute(String[] args) throws InterruptedException {
 			String stanzaId = client.newStanzaId();
 			rosterStanzaIds.add(stanzaId);
 

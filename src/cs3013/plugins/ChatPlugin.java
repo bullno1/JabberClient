@@ -1,7 +1,5 @@
 package cs3013.plugins;
 
-import java.io.IOException;
-
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
@@ -31,7 +29,7 @@ public class ChatPlugin implements Plugin, ChatHandler, StanzaHandler {
 	}
 
 	@Override
-	public void sendMessage(String msg) throws IOException {
+	public void sendMessage(String msg) throws InterruptedException {
 		if(currentFriendJID == null) {
 			client.print("Not chatting with any one right now");
 		}
@@ -62,7 +60,7 @@ public class ChatPlugin implements Plugin, ChatHandler, StanzaHandler {
 		}
 	}
 	
-	private void sendMessage(String receiver, String msg) throws IOException {
+	private void sendMessage(String receiver, String msg) throws InterruptedException {
 		JabberID jid = client.getJID();
 		
 		String stanza = String.format(

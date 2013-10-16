@@ -27,7 +27,7 @@ public class RawStanza implements Plugin, Command {
 	}
 
 	@Override
-	public void execute(String[] args) {
+	public void execute(String[] args) throws InterruptedException {
 		for(int i = 1; i < args.length; ++i) {
 			client.send(args[i]);
 			client.send(" ");

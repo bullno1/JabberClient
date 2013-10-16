@@ -36,12 +36,7 @@ public class JabberMain {
 		JabberID jid = jidList.get( 0 );
 		
 		JabberClient client = new JabberClient(jid);
-		try {
-			client.start();
-		}
-		finally {
-			client.stop();
-		}
+		client.start();
 	}
 
 	/** Helper method that gets the list of Jabber IDs specified as args. */
