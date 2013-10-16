@@ -28,13 +28,14 @@ public class JabberClient {
 
 		connection.connect();
 		
-		new XMLStreamWatcher(connection.getParser(), new TypedCallback<Boolean, XMLStreamReader>() {
+		watcher = new XMLStreamWatcher(connection.getParser(), new TypedCallback<Boolean, XMLStreamReader>() {
 			@Override
 			public Boolean call(XMLStreamReader reader) throws Exception {
 				handleTag(reader);
 				return true;
 			}
-		}).start();
+		});
+		watcher.start();
 
 		send("<presence/>");//set presence
 		//this is required for Facebook chat
@@ -47,8 +48,9 @@ public class JabberClient {
 		);
 		send(sessionStanza);
 		
+		running = true;
 		try(Scanner scanner = new Scanner(System.in)) {
-			while(true) {
+			while(running) {
 				String str = scanner.nextLine();
 				if(isCommand(str)) {
 					String[] cmd = str.split("\\s+");
@@ -70,12 +72,16 @@ public class JabberClient {
 
 	public void stop() throws IOException {
 		if(connection != null) {
-			connection.close();
-			connection = null;
-			
 			for(Plugin plugin: plugins) {
 				plugin.terminate();
 			}
+
+			watcher.stop();
+			send("</stream:stream>");
+			running = false;
+
+			connection.close();
+			connection = null;
 		}
 	}
 
@@ -188,6 +194,7 @@ public class JabberClient {
 		plugins.add(plugin);
 	}
 
+	private boolean running;
 	private boolean developerMode = false;
 	private List<Plugin> plugins = new ArrayList<Plugin>();
 	private Map<String, Command> commands = new HashMap<String, Command>();
@@ -196,11 +203,13 @@ public class JabberClient {
 	private JabberID jid;
 	private XmppConnection connection;
 	private Random random = new Random();
+	private XMLStreamWatcher watcher;
 	
 	private class CorePlugin implements Plugin {
 		@Override
 		public void init(JabberClient client) {
 			client.registerCommand("help", new HelpCommand());
+			client.registerCommand("quit", new QuitCommand());
 			client.registerCommand("dev", new DeveloperCommand());
 		}
 
@@ -269,4 +278,22 @@ public class JabberClient {
 			}
 		}
 	};
+	
+	private class QuitCommand implements Command {
+
+		@Override
+		public String getShortDescription() {
+			return "Quit the program.";
+		}
+
+		@Override
+		public String getLongDescription() {
+			return "@quit\n\n"+getShortDescription();
+		}
+
+		@Override
+		public void execute(String[] args) throws IOException {
+			stop();
+		}
+	}
 }

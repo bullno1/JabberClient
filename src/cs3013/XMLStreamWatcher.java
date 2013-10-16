@@ -19,14 +19,23 @@ class XMLStreamWatcher implements Runnable {
 				}
 			}
 		} catch (Exception e) {
-			e.printStackTrace();
+			if(!stopped)
+				e.printStackTrace();
 		}
 	}
 	
 	public void start() {
-		new Thread(this).start();
+		thread = new Thread(this);
+		thread.start();
+	}
+	
+	public void stop() {
+		stopped = true;
+		thread.interrupt();
 	}
 
+	private boolean stopped = false;
+	private Thread thread;
 	private XMLStreamReader reader;
 	private TypedCallback<Boolean, XMLStreamReader> callback;
 }
