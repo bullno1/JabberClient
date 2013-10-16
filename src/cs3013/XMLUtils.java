@@ -20,8 +20,8 @@ public final class XMLUtils {
 	}
 
 	public static void dumpXML(XMLStreamReader parser) throws XMLStreamException {
-		int depth = 1;
-		while(depth > 0) {
+		int depth = 0;
+		do {
 			switch(parser.getEventType()) {
 			case XMLStreamConstants.START_ELEMENT:
 				for(int i = 1; i < depth; ++i) {
@@ -57,7 +57,8 @@ public final class XMLUtils {
 				System.out.println(parser.getText());
 				break;
 			}
-			parser.next();
-		}
+
+			if(depth > 0) parser.next();
+		} while(depth > 0);
 	}
 }

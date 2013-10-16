@@ -330,7 +330,7 @@ public class JabberClient {
 		
 		if(!handled) {
 			if(developerMode) {
-					XMLUtils.dumpXML(parser);
+				XMLUtils.dumpXML(parser);
 			}
 			else {
 				XMLUtils.skipElement(parser);
