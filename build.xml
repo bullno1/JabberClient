@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project basedir="." default="build" name="JabberClient">
+    <property environment="env"/>
+    <property name="debuglevel" value="source,lines,vars"/>
+    <property name="target" value="1.7"/>
+    <property name="source" value="1.7"/>
+    <path id="JabberClient.classpath">
+        <pathelement location="bin"/>
+        <pathelement location="libs/commons-codec-1.8.jar"/>
+    </path>
+    <target name="init">
+        <mkdir dir="bin"/>
+    	<mkdir dir="tmp"/>
+        <copy includeemptydirs="false" todir="bin">
+            <fileset dir="src">
+                <exclude name="**/*.launch"/>
+                <exclude name="**/*.java"/>
+            </fileset>
+        </copy>
+    </target>
+    <target name="clean">
+        <delete dir="bin"/>
+        <delete dir="tmp"/>
+		<delete file="JabberClient"/>
+    </target>
+    <target depends="clean" name="cleanall"/>
+    <target depends="build-executable" name="build"/>
+    <target depends="init" name="build-project">
+        <echo message="${ant.project.name}: ${ant.file}"/>
+        <javac debug="true" debuglevel="${debuglevel}" destdir="bin" includeantruntime="false" source="${source}" target="${target}">
+            <src path="src"/>
+            <classpath refid="JabberClient.classpath"/>
+        </javac>
+    </target>
+    <target name="build-jar" depends="build-project">
+        <jar destfile="tmp/JabberClient.jar">
+            <manifest>
+                <attribute name="Main-Class" value="org.eclipse.jdt.internal.jarinjarloader.JarRsrcLoader"/>
+                <attribute name="Rsrc-Main-Class" value="cs3013.JabberMain"/>
+                <attribute name="Class-Path" value="."/>
+                <attribute name="Rsrc-Class-Path" value="./ commons-codec-1.8.jar"/>
+            </manifest>
+            <zipfileset src="jar-in-jar-loader.zip"/>
+            <fileset dir="bin"/>
+            <zipfileset dir="libs" includes="commons-codec-1.8.jar"/>
+        </jar>
+    </target>
+	<target name="build-executable" depends="build-jar">
+		<concat destfile="JabberClient" append="false" binary="true">
+			<filelist dir="." files="header.sh,tmp/JabberClient.jar"/>
+		</concat>
+		<chmod file="JabberClient" perm="ugo+x"/>
+	</target>
+</project>
