@@ -21,7 +21,7 @@ public class JabberMain {
 
 		// Check if number of args are ok (multiple of 4)
 		if ( args.length < 4 || args.length % 4 != 0 ) {
-			System.err.println( "Usage: java JabberMain " + 
+			System.err.println( "Usage: ./JabberClient " + 
 								"jabber_id password server_name server_port " + 
 								"[more Jabber ID details] ... " );
 			return;
