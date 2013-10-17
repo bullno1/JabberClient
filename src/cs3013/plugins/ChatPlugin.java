@@ -4,9 +4,12 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
+
+import org.apache.commons.lang3.StringEscapeUtils;
 
 import cs3013.ChatHandler;
 import cs3013.Command;
@@ -78,7 +81,7 @@ public class ChatPlugin implements Plugin, ChatHandler, StanzaHandler {
 			+     "<body>%s</body>"
 			+ "</message>",
 
-			jid.getJabberID(), jid.getResource(), currentFriendJID, msg
+			jid.getJabberID(), jid.getResource(), currentFriendJID, StringEscapeUtils.escapeXml(msg)
 		);
 
 		client.send(stanza);

@@ -7,6 +7,7 @@
     <path id="JabberClient.classpath">
         <pathelement location="bin"/>
         <pathelement location="libs/commons-codec-1.8.jar"/>
+        <pathelement location="libs/commons-lang3-3.1.jar"/>
     </path>
     <target name="init">
         <mkdir dir="bin"/>
@@ -38,11 +39,12 @@
                 <attribute name="Main-Class" value="org.eclipse.jdt.internal.jarinjarloader.JarRsrcLoader"/>
                 <attribute name="Rsrc-Main-Class" value="cs3013.JabberMain"/>
                 <attribute name="Class-Path" value="."/>
-                <attribute name="Rsrc-Class-Path" value="./ commons-codec-1.8.jar"/>
+                <attribute name="Rsrc-Class-Path" value="./ commons-codec-1.8.jar commons-lang3-3.1.jar"/>
             </manifest>
             <zipfileset src="jar-in-jar-loader.zip"/>
             <fileset dir="bin"/>
-            <zipfileset dir="libs" includes="commons-codec-1.8.jar"/>
+            <zipfileset dir="libs" includes="*.jar"/>
+
         </jar>
     </target>
 	<target name="build-executable" depends="build-jar">
